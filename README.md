@@ -35,16 +35,30 @@ this tool never creates another tool's dotfiles). The score cache lives beside t
 the cache location per session.
 
 ```sh
-# from a release tarball (sha256 published beside every release):
+# one-liner (verifies the release tarball's sha256 before running anything):
+curl -fsSL https://get.mythicalos.ai/ctxmonitor | bash
+
+# or from a release tarball you fetched yourself (sha256 published beside every release):
 tar -xzf mythical-ctxmonitor-<version>.tar.gz
 cd mythical-ctxmonitor && ./install.sh
 ```
 
 The installer registers the hook in `~/.claude/settings.json` (default-on) and sets the
 statusline **only if you have none** — an existing statusline is never touched; the installer
-prints a manual wrapping recipe instead. `./install.sh --dry-run` shows the full settings
-diff before anything is written; `./install.sh uninstall` surgically removes exactly the
-entries it added.
+prints a manual wrapping recipe instead. Preview before writing with `--dry-run` (it prints
+the full settings diff and writes nothing).
+
+### Uninstall
+
+```sh
+curl -fsSL https://get.mythicalos.ai/ctxmonitor | bash -s -- uninstall
+```
+
+This surgically removes exactly the entries the installer added (foreign hooks and any
+existing statusline are untouched), then removes `~/.ctxmonitor`. The same `uninstall` /
+`status` verbs work from a release tarball's `./install.sh`. If you manually wrapped an
+existing statusline to delegate to `~/.ctxmonitor/bin/statusline-command.sh`, revert that
+delegate line before uninstalling so it doesn't point at a removed path.
 
 ## Harness support
 
