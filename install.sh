@@ -80,9 +80,14 @@ case "$MODE" in
       exit 0
     fi
     mkdir -p "$DEST/bin/testdata" "$DEST/lib" "$DEST/cache"
-    for f in "${PAYLOAD[@]}" lib/settings_txn.py; do
-      cp -p "$HERE/$f" "$DEST/$f"
-    done
+    # Skip all copying when already running from $DEST (re-running the installed
+    # copy) — the files are in place, and cp of a file onto itself errors. Ship
+    # install.sh into $DEST too, so `uninstall`/`status` are self-contained.
+    if [ "$HERE" != "$DEST" ]; then
+      for f in "${PAYLOAD[@]}" lib/settings_txn.py install.sh; do
+        cp -p "$HERE/$f" "$DEST/$f"
+      done
+    fi
     mkdir -p "$(dirname "$SETTINGS")"
     REPORT="$(txn "$HERE/lib/settings_txn.py" install)" || {
       echo "FATAL: settings registration refused — program files are in place, settings untouched." >&2

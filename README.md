@@ -48,17 +48,23 @@ statusline **only if you have none** — an existing statusline is never touched
 prints a manual wrapping recipe instead. Preview before writing with `--dry-run` (it prints
 the full settings diff and writes nothing).
 
-### Uninstall
+### Uninstall / status
+
+The installer ships a copy of itself into the install home, so these are self-contained —
+no re-download:
 
 ```sh
-curl -fsSL https://get.mythicalos.ai/ctxmonitor | bash -s -- uninstall
+~/.ctxmonitor/install.sh uninstall   # surgically remove our entries, then ~/.ctxmonitor
+~/.ctxmonitor/install.sh status      # what's installed, registration state, a scorer self-test
 ```
 
-This surgically removes exactly the entries the installer added (foreign hooks and any
-existing statusline are untouched), then removes `~/.ctxmonitor`. The same `uninstall` /
-`status` verbs work from a release tarball's `./install.sh`. If you manually wrapped an
-existing statusline to delegate to `~/.ctxmonitor/bin/statusline-command.sh`, revert that
-delegate line before uninstalling so it doesn't point at a removed path.
+The one-liner works too (it fetches the release to run):
+`curl -fsSL https://get.mythicalos.ai/ctxmonitor | bash -s -- uninstall`.
+
+Uninstall removes exactly the entries the installer added — foreign hooks and any existing
+statusline are untouched. If you manually wrapped an existing statusline to delegate to
+`~/.ctxmonitor/bin/statusline-command.sh`, revert that delegate line before uninstalling so
+it doesn't point at a removed path.
 
 ## Harness support
 

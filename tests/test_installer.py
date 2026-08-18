@@ -514,6 +514,47 @@ def test_driver_refuses_relative_home(tmp_path):
     assert "absolute" in p.stderr
 
 
+def test_installed_copy_is_self_contained_for_uninstall_and_status(tmp_path):
+    # The installer ships install.sh into $DEST, so uninstall/status run from the
+    # installed copy with no re-download. This is what makes uninstall painless.
+    p, dest, settings = driver(tmp_path, "install")
+    assert p.returncode == 0, p.stderr
+    assert (dest / "install.sh").exists(), "install.sh must be shipped into the install home"
+
+    env = dict(os.environ)
+    env.update(HOME=str(tmp_path / "home"), CTXMONITOR_HOME=str(dest),
+               CTXMONITOR_SETTINGS=str(settings))
+
+    st = subprocess.run(["bash", str(dest / "install.sh"), "status"], env=env,
+                        capture_output=True, text=True, timeout=120)
+    assert st.returncode == 0, st.stderr
+    assert "hook:       registered" in st.stdout
+    assert "self-test: scorer runs" in st.stdout
+
+    un = subprocess.run(["bash", str(dest / "install.sh"), "uninstall"], env=env,
+                        capture_output=True, text=True, timeout=120)
+    assert un.returncode == 0, un.stderr
+    assert not dest.exists(), "uninstall from the installed copy removes the install home"
+    obj = json.load(open(settings))
+    assert not (obj.get("hooks") or {}).get("UserPromptSubmit")
+
+
+def test_reinstall_from_installed_copy_is_safe(tmp_path):
+    # Running the installed copy's install verb (HERE == DEST) must not error on
+    # a self-copy and must be an idempotent no-op on settings.
+    p, dest, settings = driver(tmp_path, "install")
+    assert p.returncode == 0
+    before = open(settings).read()
+    env = dict(os.environ)
+    env.update(HOME=str(tmp_path / "home"), CTXMONITOR_HOME=str(dest),
+               CTXMONITOR_SETTINGS=str(settings))
+    again = subprocess.run(["bash", str(dest / "install.sh"), "install"], env=env,
+                          capture_output=True, text=True, timeout=120)
+    assert again.returncode == 0, again.stderr
+    assert open(settings).read() == before, "re-install from $DEST is a settings no-op"
+    assert (dest / "bin" / "context_quality.py").exists()
+
+
 def test_driver_status_reports_and_self_tests(tmp_path):
     driver(tmp_path, "install")
     p, _, _ = driver(tmp_path, "status")
