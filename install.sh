@@ -76,19 +76,34 @@ txn() {  # txn <action> [--dry-run] — drives the settings transaction, prints 
 }
 
 # --- versioning ------------------------------------------------------------
-SELF_VERSION="$( [ -f "$HERE/VERSION" ] && tr -d '[:space:]' < "$HERE/VERSION" || echo 'unknown' )"
-installed_version() {  # echoes the installed version, or empty if not installed
+# All version parsing/compare goes through python3 (a hard prereq) — robust,
+# validated, and free of the `sort -V` availability/fallback traps.
+SELF_VERSION="$( [ -f "$HERE/VERSION" ] && tr -d '[:space:]' < "$HERE/VERSION" || true )"
+
+ver_ok() {  # 0 iff $1 is a dotted-numeric version (e.g. 0.1.2)
+  python3 -c 'import sys,re; sys.exit(0 if re.fullmatch(r"[0-9]+(\.[0-9]+)*", sys.argv[1]) else 1)' "$1" 2>/dev/null
+}
+
+installed_version() {  # echoes the installed version string, or empty
   [ -f "$DEST/VERSION" ] && tr -d '[:space:]' < "$DEST/VERSION" || true
 }
 
 # ver_cmp A B -> "eq" | "lt" (A older than B) | "gt" (A newer than B).
-# Uses version sort; falls back to string compare if sort -V is unavailable.
+# Both must already be valid (checked by ver_ok); compares numeric tuples.
 ver_cmp() {
-  [ "$1" = "$2" ] && { echo eq; return; }
-  local older
-  older="$(printf '%s\n%s\n' "$1" "$2" | sort -V 2>/dev/null | head -1)" || older="$1"
-  [ "$older" = "$1" ] && echo lt || echo gt
+  python3 -c '
+import sys
+def t(v): return tuple(int(x) for x in v.split("."))
+a, b = t(sys.argv[1]), t(sys.argv[2])
+print("eq" if a == b else ("lt" if a < b else "gt"))
+' "$1" "$2"
 }
+
+# This installer must know its own version to gate anything.
+if ! ver_ok "${SELF_VERSION:-}"; then
+  echo "FATAL: this installer's VERSION is missing or invalid ('${SELF_VERSION:-}') — broken package." >&2
+  exit 1
+fi
 
 # confirm "<question>" -> 0 if the user says yes. --yes forces yes; otherwise it
 # reads from the CONTROLLING TERMINAL (/dev/tty), so it still prompts under
@@ -118,12 +133,22 @@ case "$MODE" in
     done
 
     # --- version check: report the delta, gate an upgrade/downgrade on confirmation.
+    # A prior install is detected by a real payload file — NOT by the presence of a
+    # VERSION stamp, because installs before v0.1.2 shipped no VERSION. So an existing
+    # install with a missing/invalid stamp is an upgrade-from-unknown (gated), never a
+    # silent "fresh" overwrite.
     INSTALLED_VERSION="$(installed_version)"
-    if [ -z "$INSTALLED_VERSION" ]; then
+    FROM_LABEL=""
+    if [ ! -e "$DEST/bin/context_quality.py" ]; then
       REL="fresh"
       echo "ctxmonitor: fresh install of v${SELF_VERSION}."
+    elif [ -z "$INSTALLED_VERSION" ] || ! ver_ok "$INSTALLED_VERSION"; then
+      REL="lt"                       # existing but unversioned/garbage stamp => treat as older
+      FROM_LABEL="an unversioned install (pre-0.1.2)"
+      echo "ctxmonitor: upgrade available — ${FROM_LABEL} -> v${SELF_VERSION}."
     else
       REL="$(ver_cmp "$INSTALLED_VERSION" "$SELF_VERSION")"
+      FROM_LABEL="v${INSTALLED_VERSION}"
       case "$REL" in
         eq) echo "ctxmonitor: on-newest — v${INSTALLED_VERSION} is already installed (this installer is v${SELF_VERSION})." ;;
         lt) echo "ctxmonitor: upgrade available — v${INSTALLED_VERSION} -> v${SELF_VERSION}." ;;
@@ -144,9 +169,9 @@ case "$MODE" in
     # proceed silently). Never prompt under --dry-run — it writes nothing anyway.
     if [ -z "$DRY" ]; then
       case "$REL" in
-        lt) confirm "Upgrade ctxmonitor v${INSTALLED_VERSION} -> v${SELF_VERSION}?" || {
+        lt) confirm "Upgrade ctxmonitor ${FROM_LABEL} -> v${SELF_VERSION}?" || {
               echo "ctxmonitor: upgrade declined — nothing changed."; exit 0; } ;;
-        gt) confirm "Reinstall the OLDER v${SELF_VERSION} over installed v${INSTALLED_VERSION}?" || {
+        gt) confirm "Reinstall the OLDER v${SELF_VERSION} over installed ${FROM_LABEL}?" || {
               echo "ctxmonitor: left the newer version in place — nothing changed."; exit 0; } ;;
       esac
     fi
@@ -172,8 +197,8 @@ case "$MODE" in
       exit 1
     }
     case "$REL" in
-      lt) echo "upgraded: $DEST (v${INSTALLED_VERSION} -> v${SELF_VERSION})" ;;
-      gt) echo "reinstalled v${SELF_VERSION}: $DEST" ;;
+      lt) echo "upgraded: $DEST (${FROM_LABEL} -> v${SELF_VERSION})" ;;
+      gt) echo "reinstalled v${SELF_VERSION}: $DEST (was ${FROM_LABEL})" ;;
       eq) echo "reconverged v${SELF_VERSION}: $DEST" ;;
       *)  echo "installed: $DEST (v${SELF_VERSION})" ;;
     esac
@@ -219,8 +244,10 @@ if r.get("backup"):
     ;;
   status)
     INSTALLED_VERSION="$(installed_version)"
-    if [ -z "$INSTALLED_VERSION" ]; then
+    if [ ! -e "$DEST/bin/context_quality.py" ]; then
       echo "version:    not installed  (this installer is v${SELF_VERSION})"
+    elif [ -z "$INSTALLED_VERSION" ] || ! ver_ok "$INSTALLED_VERSION"; then
+      echo "version:    unversioned (pre-0.1.2)  (upgrade available -> v${SELF_VERSION})"
     else
       case "$(ver_cmp "$INSTALLED_VERSION" "$SELF_VERSION")" in
         eq) echo "version:    v${INSTALLED_VERSION}  (on-newest)" ;;

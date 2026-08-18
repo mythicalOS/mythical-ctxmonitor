@@ -98,6 +98,21 @@ def test_our_own_statusline_reports_already_ours_not_kept_existing(tmp_path):
     assert read(p)["statusLine"]["command"] == SL
 
 
+def test_statusline_ownership_predicate_is_strict_and_consistent(tmp_path):
+    # A foreign statusLine that reuses our command string but is NOT type:command
+    # is foreign: install reports kept-existing (recipe), uninstall does not remove
+    # it. The install-report and uninstall predicates must agree.
+    p = str(tmp_path / "settings.json")
+    imposter = {"type": "other", "command": SL}
+    with open(p, "w") as f:
+        json.dump({"statusLine": imposter}, f)
+    r = install(p)
+    assert r["statusline"] == "kept-existing", "type!=command is foreign, not ours"
+    r2 = uninstall(p)
+    assert r2["statusline"] == "absent", "uninstall must not remove a foreign statusLine"
+    assert read(p)["statusLine"] == imposter
+
+
 def test_double_install_is_a_noop(tmp_path):
     p = str(tmp_path / "settings.json")
     install(p)
@@ -618,6 +633,33 @@ def test_upgrade_with_yes_proceeds_and_bumps_version(tmp_path):
     assert "upgrade" in p2.stdout.lower()
     assert f"0.1.0 -> v{self_v}" in p2.stdout or f"0.1.0 -> {self_v}" in p2.stdout
     assert (dest / "VERSION").read_text().strip() == self_v, "upgrade bumps the installed VERSION"
+
+
+def test_preversion_install_is_upgraded_not_treated_as_fresh(tmp_path):
+    # v0.1.0/v0.1.1 shipped NO VERSION file. An existing payload with no version
+    # stamp must be detected as an upgrade-from-unknown (gated), never a silent
+    # "fresh" overwrite.
+    p, dest, settings = driver(tmp_path, "install")
+    assert p.returncode == 0
+    (dest / "VERSION").unlink()                       # simulate a pre-version install
+    assert (dest / "bin" / "context_quality.py").exists()
+    self_v = (pathlib.Path(REPO) / "VERSION").read_text().strip()
+    # --check must report an upgrade, not "fresh"/"not installed"
+    chk, _, _ = driver(tmp_path, "install", "--check")
+    assert "upgrade available" in chk.stdout and "unversioned" in chk.stdout
+    assert not (dest / "VERSION").exists(), "--check writes nothing"
+    # a real run (--yes) upgrades and stamps the version
+    up, _, _ = driver(tmp_path, "install", "--yes")
+    assert "unversioned" in up.stdout
+    assert (dest / "VERSION").read_text().strip() == self_v
+
+
+def test_garbage_installed_version_is_treated_as_unversioned(tmp_path):
+    p, dest, settings = driver(tmp_path, "install")
+    (dest / "VERSION").write_text("not-a-version\n")
+    chk, _, _ = driver(tmp_path, "install", "--check")
+    assert chk.returncode == 0, chk.stderr
+    assert "upgrade available" in chk.stdout and "unversioned" in chk.stdout
 
 
 def test_downgrade_detected_and_gated(tmp_path):

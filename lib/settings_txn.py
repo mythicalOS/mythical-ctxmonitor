@@ -136,6 +136,16 @@ def _hook_present(obj, command):
     return False
 
 
+def _is_our_statusline(sl, statusline_command):
+    """ONE ownership predicate, shared by install-reporting and uninstall — a
+    statusLine object is ours only if it is exactly our {type:command, command}.
+    A foreign object that merely reuses our command string (e.g. type != command)
+    is NOT ours: install keeps it (recipe printed) and uninstall leaves it."""
+    return (isinstance(sl, dict)
+            and sl.get("type") == "command"
+            and sl.get("command") == statusline_command)
+
+
 def apply_install(obj, hook_command, statusline_command):
     """Pure merge. Returns (new_obj, report) — report says what happened per entry."""
     _validate_shapes(obj)
@@ -155,7 +165,7 @@ def apply_install(obj, hook_command, statusline_command):
         # "on-newest") from a genuinely foreign one (which we leave untouched and
         # tell the user how to wrap).
         cur = out.get("statusLine")
-        if isinstance(cur, dict) and cur.get("command") == statusline_command:
+        if _is_our_statusline(cur, statusline_command):
             report["statusline"] = "already-ours"
         else:
             report["statusline"] = "kept-existing"
@@ -194,9 +204,7 @@ def apply_uninstall(obj, hook_command, statusline_command):
             hooks.pop("UserPromptSubmit", None)
         if not hooks:
             out.pop("hooks", None)
-    sl = out.get("statusLine")
-    if isinstance(sl, dict) and sl.get("type") == "command" \
-            and sl.get("command") == statusline_command:
+    if _is_our_statusline(out.get("statusLine"), statusline_command):
         out.pop("statusLine")
         report["statusline"] = "removed"
     return out, report
