@@ -662,6 +662,20 @@ def test_garbage_installed_version_is_treated_as_unversioned(tmp_path):
     assert "upgrade available" in chk.stdout and "unversioned" in chk.stdout
 
 
+def test_corrupt_install_stamp_without_payload_is_still_gated(tmp_path):
+    # A prior install detected by EITHER the payload OR a VERSION stamp — a corrupt
+    # state (stamp present, payload gone) must be gated, never a silent "fresh"
+    # overwrite that skips a downgrade warning.
+    p, dest, settings = driver(tmp_path, "install")
+    (dest / "bin" / "context_quality.py").unlink()   # payload gone
+    (dest / "VERSION").write_text("9.9.9\n")          # a NEWER stamp remains
+    chk, _, _ = driver(tmp_path, "install", "--check")
+    assert chk.returncode == 0, chk.stderr
+    assert "DOWNGRADE" in chk.stdout, "stamp-without-payload must not read as fresh"
+    st, _, _ = driver(tmp_path, "install", "status")
+    assert "not installed" not in st.stdout
+
+
 def test_downgrade_detected_and_gated(tmp_path):
     p, dest, settings = driver(tmp_path, "install")
     assert p.returncode == 0

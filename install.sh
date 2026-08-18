@@ -139,7 +139,10 @@ case "$MODE" in
     # silent "fresh" overwrite.
     INSTALLED_VERSION="$(installed_version)"
     FROM_LABEL=""
-    if [ ! -e "$DEST/bin/context_quality.py" ]; then
+    # "A prior install exists" = payload present OR a VERSION stamp present, so a
+    # corrupt install (stamp without payload, or payload without stamp) is still
+    # gated, never silently overwritten as "fresh".
+    if [ ! -e "$DEST/bin/context_quality.py" ] && [ ! -f "$DEST/VERSION" ]; then
       REL="fresh"
       echo "ctxmonitor: fresh install of v${SELF_VERSION}."
     elif [ -z "$INSTALLED_VERSION" ] || ! ver_ok "$INSTALLED_VERSION"; then
@@ -244,7 +247,7 @@ if r.get("backup"):
     ;;
   status)
     INSTALLED_VERSION="$(installed_version)"
-    if [ ! -e "$DEST/bin/context_quality.py" ]; then
+    if [ ! -e "$DEST/bin/context_quality.py" ] && [ ! -f "$DEST/VERSION" ]; then
       echo "version:    not installed  (this installer is v${SELF_VERSION})"
     elif [ -z "$INSTALLED_VERSION" ] || ! ver_ok "$INSTALLED_VERSION"; then
       echo "version:    unversioned (pre-0.1.2)  (upgrade available -> v${SELF_VERSION})"
@@ -274,9 +277,11 @@ hook = any(e.get("type") == "command" and e.get("command") == hook_cmd
            for g in (obj.get("hooks") or {}).get("UserPromptSubmit") or []
            for e in g.get("hooks") or [])
 sl = obj.get("statusLine") or {}
+# Strict ownership, consistent with install/uninstall: ours only if it is exactly
+# {type:command, command:<ours>}. A foreign object reusing our command is "other".
+ours = isinstance(sl, dict) and sl.get("type") == "command" and sl.get("command") == sl_cmd
 print("hook:       " + ("registered" if hook else "NOT registered"))
-print("statusline: " + ("ours" if sl.get("command") == sl_cmd
-                        else ("other (untouched by us)" if sl else "none")))
+print("statusline: " + ("ours" if ours else ("other (untouched by us)" if sl else "none")))
 EOF
     else
       echo "settings: $SETTINGS does not exist"
