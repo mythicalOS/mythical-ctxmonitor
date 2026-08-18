@@ -78,14 +78,16 @@ txn() {  # txn <action> [--dry-run] — drives the settings transaction, prints 
 # --- versioning ------------------------------------------------------------
 # All version parsing/compare goes through python3 (a hard prereq) — robust,
 # validated, and free of the `sort -V` availability/fallback traps.
-SELF_VERSION="$( [ -f "$HERE/VERSION" ] && tr -d '[:space:]' < "$HERE/VERSION" || true )"
+SELF_VERSION=""
+[ -f "$HERE/VERSION" ] && SELF_VERSION="$(tr -d '[:space:]' < "$HERE/VERSION")"
 
 ver_ok() {  # 0 iff $1 is a dotted-numeric version (e.g. 0.1.2)
   python3 -c 'import sys,re; sys.exit(0 if re.fullmatch(r"[0-9]+(\.[0-9]+)*", sys.argv[1]) else 1)' "$1" 2>/dev/null
 }
 
 installed_version() {  # echoes the installed version string, or empty
-  [ -f "$DEST/VERSION" ] && tr -d '[:space:]' < "$DEST/VERSION" || true
+  [ -f "$DEST/VERSION" ] || return 0
+  tr -d '[:space:]' < "$DEST/VERSION"
 }
 
 # ver_cmp A B -> "eq" | "lt" (A older than B) | "gt" (A newer than B).
