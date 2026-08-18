@@ -7,6 +7,7 @@ CTXMONITOR_SETTINGS redirected into a temp tree. Nothing here touches the real m
 """
 import json
 import os
+import pathlib
 import stat
 import subprocess
 import sys
@@ -85,6 +86,16 @@ def test_existing_statusline_is_never_touched(tmp_path):
     r = install(p)
     assert r["statusline"] == "kept-existing"
     assert read(p)["statusLine"]["command"] == "their-statusline"
+
+
+def test_our_own_statusline_reports_already_ours_not_kept_existing(tmp_path):
+    # A re-run where the present statusLine is OURS is "already-ours" (surfaced as
+    # "on-newest"), not "kept-existing" (which means a FOREIGN statusline).
+    p = str(tmp_path / "settings.json")
+    install(p)                      # sets ours
+    r = install(p)                  # re-run: ours is present
+    assert r["statusline"] == "already-ours"
+    assert read(p)["statusLine"]["command"] == SL
 
 
 def test_double_install_is_a_noop(tmp_path):
@@ -553,6 +564,71 @@ def test_reinstall_from_installed_copy_is_safe(tmp_path):
     assert again.returncode == 0, again.stderr
     assert open(settings).read() == before, "re-install from $DEST is a settings no-op"
     assert (dest / "bin" / "context_quality.py").exists()
+
+
+def _set_installed_version(dest, v):
+    (dest / "VERSION").write_text(v + "\n")
+
+
+def test_version_written_on_install(tmp_path):
+    p, dest, settings = driver(tmp_path, "install")
+    assert p.returncode == 0, p.stderr
+    self_v = (pathlib.Path(REPO) / "VERSION").read_text().strip()
+    assert (dest / "VERSION").read_text().strip() == self_v
+
+
+def test_reinstall_same_version_reports_on_newest(tmp_path):
+    driver(tmp_path, "install")
+    p, dest, settings = driver(tmp_path, "install")
+    assert p.returncode == 0, p.stderr
+    assert "on-newest" in p.stdout
+    assert "statusline: on-newest" in p.stdout, "our own statusline reads on-newest, not kept-existing"
+
+
+def test_check_on_fresh_reports_not_installed_and_writes_nothing(tmp_path):
+    home = tmp_path / "home"
+    dest = home / ".ctxmonitor"
+    p, dest, settings = driver(tmp_path, "install", "--check")
+    assert p.returncode == 0, p.stderr
+    assert "not installed" in p.stdout
+    assert not dest.exists(), "--check must install nothing"
+    assert not settings.exists()
+
+
+def test_check_reports_upgrade_without_installing(tmp_path):
+    p, dest, settings = driver(tmp_path, "install")
+    assert p.returncode == 0
+    _set_installed_version(dest, "0.1.0")            # pretend an older version is installed
+    before = (dest / "bin" / "context_quality.py").read_bytes()
+    p2, _, _ = driver(tmp_path, "install", "--check")
+    assert p2.returncode == 0, p2.stderr
+    assert "upgrade available" in p2.stdout
+    assert "0.1.0" in p2.stdout
+    assert (dest / "VERSION").read_text().strip() == "0.1.0", "--check must not bump VERSION"
+    assert (dest / "bin" / "context_quality.py").read_bytes() == before, "--check must not touch files"
+
+
+def test_upgrade_with_yes_proceeds_and_bumps_version(tmp_path):
+    p, dest, settings = driver(tmp_path, "install")
+    assert p.returncode == 0
+    _set_installed_version(dest, "0.1.0")
+    self_v = (pathlib.Path(REPO) / "VERSION").read_text().strip()
+    p2, _, _ = driver(tmp_path, "install", "--yes")
+    assert p2.returncode == 0, p2.stderr
+    assert "upgrade" in p2.stdout.lower()
+    assert f"0.1.0 -> v{self_v}" in p2.stdout or f"0.1.0 -> {self_v}" in p2.stdout
+    assert (dest / "VERSION").read_text().strip() == self_v, "upgrade bumps the installed VERSION"
+
+
+def test_downgrade_detected_and_gated(tmp_path):
+    p, dest, settings = driver(tmp_path, "install")
+    assert p.returncode == 0
+    _set_installed_version(dest, "9.9.9")            # installed is newer than this installer
+    self_v = (pathlib.Path(REPO) / "VERSION").read_text().strip()
+    p2, _, _ = driver(tmp_path, "install", "--yes")  # --yes proceeds through the downgrade
+    assert p2.returncode == 0, p2.stderr
+    assert "DOWNGRADE" in p2.stdout
+    assert (dest / "VERSION").read_text().strip() == self_v
 
 
 def test_driver_status_reports_and_self_tests(tmp_path):

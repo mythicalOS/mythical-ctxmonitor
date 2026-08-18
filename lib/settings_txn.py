@@ -151,7 +151,14 @@ def apply_install(obj, hook_command, statusline_command):
     if statusline_command is None:
         report["statusline"] = "skipped"
     elif "statusLine" in out:
-        report["statusline"] = "kept-existing"
+        # Distinguish OUR own current statusLine (a re-run/upgrade — nothing to do,
+        # "on-newest") from a genuinely foreign one (which we leave untouched and
+        # tell the user how to wrap).
+        cur = out.get("statusLine")
+        if isinstance(cur, dict) and cur.get("command") == statusline_command:
+            report["statusline"] = "already-ours"
+        else:
+            report["statusline"] = "kept-existing"
     else:
         out["statusLine"] = {"type": "command", "command": statusline_command}
         report["statusline"] = "added"

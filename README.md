@@ -48,6 +48,22 @@ statusline **only if you have none** — an existing statusline is never touched
 prints a manual wrapping recipe instead. Preview before writing with `--dry-run` (it prints
 the full settings diff and writes nothing).
 
+### Upgrades — version-aware
+
+The installer knows what version is installed and what version it is:
+
+```sh
+~/.ctxmonitor/install.sh install --check   # report the version delta; install nothing
+~/.ctxmonitor/install.sh install           # upgrade: shows <from> -> <to> and asks to confirm
+~/.ctxmonitor/install.sh install --yes     # ...or proceed without prompting
+```
+
+- A re-run of the same version reports **on-newest** and re-converges (repairs any drift), no prompt.
+- A newer installer shows `v<from> -> v<to>` and asks before changing anything (the prompt reads
+  your terminal even under `curl … | bash`). Decline and nothing changes.
+- Truly non-interactive runs (no terminal) proceed with a printed notice — the version was pinned
+  deliberately by whatever invoked it; pass `--yes` to silence the notice.
+
 ### Uninstall / status
 
 The installer ships a copy of itself into the install home, so these are self-contained —

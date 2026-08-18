@@ -72,6 +72,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Tag must match VERSION
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME#v}"
+          FILE="$(tr -d '[:space:]' < VERSION)"
+          [ "$TAG" = "$FILE" ] || { echo "::error::tag v$TAG != VERSION file ($FILE) — bump VERSION"; exit 1; }
+          echo "tag == VERSION ($FILE)"
+
       - name: Build the two release artifacts
         run: |
           set -euxo pipefail
