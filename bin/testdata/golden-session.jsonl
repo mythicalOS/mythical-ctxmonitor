@@ -1,0 +1,82 @@
+# golden-session.jsonl -- the CROSS-LANGUAGE golden fixture for the context-quality
+# definitions that bin/context_quality.py and core/src/telemetry/session-metrics.ts
+# MIRROR: effective_input, the scoreable-assistant predicate, the model->window map,
+# and the ">window => 1M" inference net.
+#
+# THE POINT OF THIS FILE. Two tests read THIS file and golden-session.expected.json:
+#   the python golden-session suite        (tests/ in the ctxmonitor package)
+#   core/tests/session-metrics.test.ts     ("golden fixture (cross-language)", brokkr)
+# They assert the SAME numbers from the SAME two files. So a definition changed in ONE
+# language now BREAKS THAT LANGUAGE'S assertion against the shared expectation -- the
+# mirror stops being a comment that nothing enforces, which is how these two definitions
+# were previously kept in step (badly: drift was found by archaeology, not by a suite).
+# NEVER repair a failure by editing the expected file until it matches whatever the code
+# prints today. Decide which language is RIGHT, fix BOTH, then restate the expectation.
+#
+# WHAT THIS FIXTURE DOES NOT COVER. The two implementations do NOT agree on non-canonical
+# token values (a negative, a numeric string, a boolean): python's `int(x or 0)` accepts
+# them, the TS toTokenInt clamps them to 0. Such a record cannot live here at all -- the two
+# languages would compute different sums, so no SHARED expectation could exist for it. That
+# split is real and pre-existing; it is recorded, with both answers and a per-language
+# assertion, under `known_divergences` in golden-session.expected.json. Read that before
+# concluding this fixture proves the two definitions agree everywhere: it does not.
+#
+# Synthetic content only -- no real transcript material. ASCII only, no NUL bytes.
+# The '#' lines are not JSON, so context_quality.py's fail-open _parse_jsonl_lines skips
+# them; the TS test's loader mirrors that fail-open skip (the one place the two loaders
+# part company is recorded under known_divergences too).
+# RECORD INDICES in the expected file are therefore indices into the PARSED record list,
+# not raw line numbers -- and each record's uuid ends in its own index (...-0000000000NN)
+# so the expected file's scoreable_uuids cross-check the indices independently.
+#
+# WHAT EACH RECORD IS FOR (index: why it exists)
+#   1,3    plain scoreable turns, 1M-tier model (cache-creation turn, then cache-read turn)
+#   4,5    a sidechain assistant + its sidechain user record -- subagent turns are EXCLUDED
+#   6      a '<synthetic>' error placeholder WITH usage -- synthetic-ness is the only reason
+#          it is excluded, and its 77000 tokens would move every sum if that check broke
+#   7      an assistant with NO usage key at all              -- usage-absent exclusion
+#   8      an assistant with usage: null                      -- usage-null exclusion
+#   9      null input_tokens / null cache_creation            -- the `int(x or 0)` discipline
+#   10     input_tokens / cache_creation MISSING entirely     -- same discipline, absent form
+#   12     a LEGACY 200k model (haiku) as the final turn of view `prefix_legacy_final`,
+#          after only 1M-tier turns -- pins window-from-the-FINAL-model on a mixed session
+#   14     a second sidechain, with large usage (a broken sidechain check moves the sums)
+#   16     a legacy 200k model carrying 250000 effective input -- over its detected window,
+#          so view `prefix_over_window` TRIPS the ">window => 1M" inference net
+#   18     usage PRESENT but all zero -- a scoreable turn that contributes nothing
+#          (distinct from 7/8, where usage is absent: those are not turns at all)
+#   19     isSidechain present and FALSE -- must still be scoreable
+#   21     the FINAL scoreable turn: claude-opus-4-10-... -- the digit-boundary case. The
+#          200k token "opus-4-1" is a substring of "opus-4-10"; only the (?!\d) boundary
+#          keeps this 1M model out of the 200k tier. Its effective input (187500) is
+#          deliberately BELOW 200000, so a broken boundary is NOT rescued by the inference
+#          net and shows up as window 200000 / occupancy 0.9375 instead of 1M / 0.1875.
+#   23,24  a synthetic and a sidechain record AFTER the last real turn -- pin that the
+#          final-turn selection skips them (else the final model/window/occupancy move)
+#   0,2,11,13,17,20,22,25  user records -- never scoreable
+{"uuid":"00000000-0000-4000-8000-000000000000","timestamp":"2026-08-01T10:00:00.000Z","type":"user","promptSource":"typed","message":{"role":"user","content":"please summarize the build log"}}
+{"uuid":"00000000-0000-4000-8000-000000000001","timestamp":"2026-08-01T10:00:04.000Z","type":"assistant","message":{"role":"assistant","model":"claude-opus-5-20260514","usage":{"input_tokens":1200,"cache_read_input_tokens":0,"cache_creation_input_tokens":8800,"output_tokens":150}}}
+{"uuid":"00000000-0000-4000-8000-000000000002","timestamp":"2026-08-01T10:00:06.000Z","type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_fixture_01","content":"ok"}]}}
+{"uuid":"00000000-0000-4000-8000-000000000003","timestamp":"2026-08-01T10:00:09.000Z","type":"assistant","message":{"role":"assistant","model":"claude-opus-5-20260514","usage":{"input_tokens":4250,"cache_read_input_tokens":5750,"cache_creation_input_tokens":0,"output_tokens":90}}}
+{"uuid":"00000000-0000-4000-8000-000000000004","timestamp":"2026-08-01T10:00:12.000Z","type":"assistant","isSidechain":true,"message":{"role":"assistant","model":"claude-sonnet-4-6-20251114","usage":{"input_tokens":4000,"cache_read_input_tokens":1000,"cache_creation_input_tokens":0,"output_tokens":300}}}
+{"uuid":"00000000-0000-4000-8000-000000000005","timestamp":"2026-08-01T10:00:14.000Z","type":"user","isSidechain":true,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_fixture_02","content":"subagent done"}]}}
+{"uuid":"00000000-0000-4000-8000-000000000006","timestamp":"2026-08-01T10:00:16.000Z","type":"assistant","message":{"role":"assistant","model":"<synthetic>","usage":{"input_tokens":77000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":0}}}
+{"uuid":"00000000-0000-4000-8000-000000000007","timestamp":"2026-08-01T10:00:18.000Z","type":"assistant","message":{"role":"assistant","model":"claude-opus-5-20260514","content":[{"type":"text","text":"no usage on this record at all"}]}}
+{"uuid":"00000000-0000-4000-8000-000000000008","timestamp":"2026-08-01T10:00:20.000Z","type":"assistant","message":{"role":"assistant","model":"claude-opus-5-20260514","usage":null}}
+{"uuid":"00000000-0000-4000-8000-000000000009","timestamp":"2026-08-01T10:00:23.000Z","type":"assistant","message":{"role":"assistant","model":"claude-opus-5-20260514","usage":{"input_tokens":null,"cache_read_input_tokens":12000,"cache_creation_input_tokens":null,"output_tokens":40}}}
+{"uuid":"00000000-0000-4000-8000-000000000010","timestamp":"2026-08-01T10:00:26.000Z","type":"assistant","message":{"role":"assistant","model":"claude-opus-5-20260514","usage":{"cache_read_input_tokens":8000,"output_tokens":25}}}
+{"uuid":"00000000-0000-4000-8000-000000000011","timestamp":"2026-08-01T10:00:28.000Z","type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_fixture_03","content":"ok"}]}}
+{"uuid":"00000000-0000-4000-8000-000000000012","timestamp":"2026-08-01T10:00:31.000Z","type":"assistant","message":{"role":"assistant","model":"claude-haiku-4-5-20251001","usage":{"input_tokens":2000,"cache_read_input_tokens":23000,"cache_creation_input_tokens":0,"output_tokens":60}}}
+{"uuid":"00000000-0000-4000-8000-000000000013","timestamp":"2026-08-01T10:00:34.000Z","type":"user","promptSource":"typed","message":{"role":"user","content":"now check the other lane"}}
+{"uuid":"00000000-0000-4000-8000-000000000014","timestamp":"2026-08-01T10:00:37.000Z","type":"assistant","isSidechain":true,"message":{"role":"assistant","model":"claude-haiku-4-5-20251001","usage":{"input_tokens":30000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":100}}}
+{"uuid":"00000000-0000-4000-8000-000000000015","timestamp":"2026-08-01T10:00:40.000Z","type":"assistant","message":{"role":"assistant","model":"claude-opus-5-20260514","usage":{"input_tokens":625,"cache_read_input_tokens":34375,"cache_creation_input_tokens":0,"output_tokens":70}}}
+{"uuid":"00000000-0000-4000-8000-000000000016","timestamp":"2026-08-01T10:00:44.000Z","type":"assistant","message":{"role":"assistant","model":"claude-opus-4-1-20250805","usage":{"input_tokens":5000,"cache_read_input_tokens":245000,"cache_creation_input_tokens":0,"output_tokens":120}}}
+{"uuid":"00000000-0000-4000-8000-000000000017","timestamp":"2026-08-01T10:00:46.000Z","type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_fixture_04","content":"ok"}]}}
+{"uuid":"00000000-0000-4000-8000-000000000018","timestamp":"2026-08-01T10:00:49.000Z","type":"assistant","message":{"role":"assistant","model":"claude-opus-5-20260514","usage":{"input_tokens":0,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":5}}}
+{"uuid":"00000000-0000-4000-8000-000000000019","timestamp":"2026-08-01T10:00:52.000Z","type":"assistant","isSidechain":false,"message":{"role":"assistant","model":"claude-opus-5-20260514","usage":{"input_tokens":10625,"cache_read_input_tokens":11875,"cache_creation_input_tokens":0,"output_tokens":45}}}
+{"uuid":"00000000-0000-4000-8000-000000000020","timestamp":"2026-08-01T10:00:54.000Z","type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_fixture_05","content":"ok"}]}}
+{"uuid":"00000000-0000-4000-8000-000000000021","timestamp":"2026-08-01T10:00:58.000Z","type":"assistant","message":{"role":"assistant","model":"claude-opus-4-10-20260401","usage":{"input_tokens":12500,"cache_read_input_tokens":150000,"cache_creation_input_tokens":25000,"output_tokens":200}}}
+{"uuid":"00000000-0000-4000-8000-000000000022","timestamp":"2026-08-01T10:01:00.000Z","type":"user","promptSource":"typed","message":{"role":"user","content":"thanks"}}
+{"uuid":"00000000-0000-4000-8000-000000000023","timestamp":"2026-08-01T10:01:02.000Z","type":"assistant","message":{"role":"assistant","model":"<synthetic>","usage":{"input_tokens":90000,"cache_read_input_tokens":90000,"cache_creation_input_tokens":0,"output_tokens":10}}}
+{"uuid":"00000000-0000-4000-8000-000000000024","timestamp":"2026-08-01T10:01:05.000Z","type":"assistant","isSidechain":true,"message":{"role":"assistant","model":"claude-haiku-4-5-20251001","usage":{"input_tokens":40000,"cache_read_input_tokens":40000,"cache_creation_input_tokens":0,"output_tokens":80}}}
+{"uuid":"00000000-0000-4000-8000-000000000025","timestamp":"2026-08-01T10:01:07.000Z","type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_fixture_06","content":"ok"}]}}
