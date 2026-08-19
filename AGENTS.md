@@ -19,6 +19,12 @@ Run only if your active role permits command execution.
 - Shell syntax: `bash -n bin/*.sh install.sh`
 - Score the fixture: `python3 bin/context_quality.py score bin/testdata/golden-session.jsonl --json`
 
+**Releasing:** the `VERSION` file is the single source of truth for the package version — bump it
+in the same commit as the changes, then tag `v<VERSION>` (CI asserts the tag matches `VERSION`).
+The installer reads `VERSION` to drive its version-aware install/upgrade flow and ships it into
+`~/.ctxmonitor/`; it is NOT one of the five vendored payload files, so a bump does not touch the
+brokkr vendor gate (only the tarball sha + the manifest's `upstream_tag` move on the consumer side).
+
 ## Boundaries & gotchas
 
 - **`bin/testdata/golden-session.expected.json` is a hand-computed cross-language oracle**,

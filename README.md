@@ -71,7 +71,7 @@ no re-download:
 
 ```sh
 ~/.ctxmonitor/install.sh uninstall   # surgically remove our entries, then ~/.ctxmonitor
-~/.ctxmonitor/install.sh status      # what's installed, registration state, a scorer self-test
+~/.ctxmonitor/install.sh status      # version, installed files, registration state, self-test
 ```
 
 The one-liner works too (it fetches the release to run):
