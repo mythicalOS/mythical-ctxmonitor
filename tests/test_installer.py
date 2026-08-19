@@ -565,6 +565,38 @@ def test_installed_copy_is_self_contained_for_uninstall_and_status(tmp_path):
     assert not (obj.get("hooks") or {}).get("UserPromptSubmit")
 
 
+def test_repo_install_sh_is_executable():
+    # The release tarball is `git archive` of HEAD, so the repo file's mode IS the
+    # shipped mode — README's `./install.sh` and the tarball both depend on it.
+    assert os.access(INSTALL_SH, os.X_OK), "install.sh must carry the executable bit"
+
+
+def test_installed_copy_is_executable(tmp_path):
+    # The documented self-contained verbs (`~/.ctxmonitor/install.sh status` etc.)
+    # run the shipped copy directly — it must land executable.
+    p, dest, settings = driver(tmp_path, "install")
+    assert p.returncode == 0, p.stderr
+    assert os.access(dest / "install.sh", os.X_OK), \
+        "the installed copy of install.sh must be executable"
+
+
+def test_reinstall_heals_installed_copy_mode(tmp_path):
+    # Installs shipped by pre-v0.1.3 releases carry a 0644 install.sh. Re-running
+    # the installed copy in place (HERE == DEST, copies skipped) must still repair
+    # the mode — the fix has to reach existing broken installs, not only new ones.
+    p, dest, settings = driver(tmp_path, "install")
+    assert p.returncode == 0, p.stderr
+    os.chmod(dest / "install.sh", 0o644)
+    env = dict(os.environ)
+    env.update(HOME=str(tmp_path / "home"), CTXMONITOR_HOME=str(dest),
+               CTXMONITOR_SETTINGS=str(settings))
+    again = subprocess.run(["bash", str(dest / "install.sh"), "install"], env=env,
+                           capture_output=True, text=True, timeout=120)
+    assert again.returncode == 0, again.stderr
+    assert os.access(dest / "install.sh", os.X_OK), \
+        "an in-place re-run must restore the executable bit"
+
+
 def test_reinstall_from_installed_copy_is_safe(tmp_path):
     # Running the installed copy's install verb (HERE == DEST) must not error on
     # a self-copy and must be an idempotent no-op on settings.

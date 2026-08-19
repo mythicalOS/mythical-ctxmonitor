@@ -196,6 +196,11 @@ case "$MODE" in
         cp -p "$HERE/$f" "$DEST/$f"
       done
     fi
+    # Self-heal the shipped copy's mode: pre-v0.1.3 releases carried install.sh
+    # as 0644 (cp -p preserves whatever the source had), which broke the
+    # documented self-contained verbs. Runs in the HERE == DEST case too, so an
+    # in-place re-run repairs an existing broken install.
+    chmod 755 "$DEST/install.sh"
     mkdir -p "$(dirname "$SETTINGS")"
     REPORT="$(txn "$HERE/lib/settings_txn.py" install)" || {
       echo "FATAL: settings registration refused — program files are in place, settings untouched." >&2

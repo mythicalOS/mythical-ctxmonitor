@@ -105,9 +105,9 @@ jobs:
           # The tarball must carry the executable bit — the only mode git tracks
           # (git archive renders executables as 0775 in tar headers; extraction
           # applies the user's umask). Loud on failure.
-          listing="$(tar -tvzf "${NAME}.tar.gz" | grep -E 'bin/(context_quality\.py|statusline-command\.sh|context-signal\.sh)$')"
+          listing="$(tar -tvzf "${NAME}.tar.gz" | grep -E '(bin/(context_quality\.py|statusline-command\.sh|context-signal\.sh)|/install\.sh)$')"
           echo "$listing"
-          [ "$(printf '%s\n' "$listing" | grep -c '^-rwx')" = 3 ] || {
+          [ "$(printf '%s\n' "$listing" | grep -c '^-rwx')" = 4 ] || {
             echo "::error::tarball script entries are not all owner-executable"; exit 1; }
           cat payload-manifest.txt "${NAME}.tar.gz.sha256"
 
