@@ -1,0 +1,124 @@
+name: ci
+
+# Self-contained by contract: this workflow never checks out or contacts any other
+# repository. The cross-repo concerns (the vendor gate, the marker byte pin) are owned by
+# the consumer's CI — see docs/brokkr-integration.md.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Shell syntax + lint
+        run: |
+          set -euo pipefail
+          bash -n bin/statusline-command.sh bin/context-signal.sh install.sh
+          if command -v shellcheck >/dev/null 2>&1; then
+            # The two bin/ scripts are the byte-pinned vendored payload — style
+            # findings there are the payload's house style and are not fixable in
+            # CI's name (the vendor contract is byte-exact), so only error-severity
+            # findings gate them. install.sh is repo-owned and held to the default bar.
+            shellcheck -S error -e SC1090,SC1091 bin/statusline-command.sh bin/context-signal.sh
+            shellcheck -e SC1090,SC1091 install.sh
+          else
+            echo "::warning::shellcheck unavailable — syntax check only"
+          fi
+
+      - name: File modes (part of the vendor contract)
+        run: |
+          set -euo pipefail
+          check() { got=$(git ls-files -s -- "$2" | awk '{print $1}');
+                    [ "$got" = "$1" ] || { echo "::error::$2 mode $got, want $1"; exit 1; }; }
+          check 100755 bin/context_quality.py
+          check 100755 bin/statusline-command.sh
+          check 100755 bin/context-signal.sh
+          check 100644 bin/testdata/golden-session.jsonl
+          check 100644 bin/testdata/golden-session.expected.json
+
+      - name: Fixture hygiene (ASCII, NUL-free)
+        run: |
+          set -euo pipefail
+          python3 - <<'EOF'
+          for p in ("bin/testdata/golden-session.jsonl",
+                    "bin/testdata/golden-session.expected.json"):
+              raw = open(p, "rb").read()
+              assert b"\x00" not in raw, f"{p} contains a NUL byte"
+              raw.decode("ascii")
+          print("fixtures clean")
+          EOF
+
+      - name: Tests (oracle parity, CLI, hooks, marker behavior)
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pytest
+          python3 -m pytest tests/ -q
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Tag must match VERSION
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME#v}"
+          FILE="$(tr -d '[:space:]' < VERSION)"
+          [ "$TAG" = "$FILE" ] || { echo "::error::tag v$TAG != VERSION file ($FILE) — bump VERSION"; exit 1; }
+          echo "tag == VERSION ($FILE)"
+
+      - name: Build the two release artifacts
+        run: |
+          set -euxo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          NAME="mythical-ctxmonitor-${VERSION}"
+          # Artifact 1: the per-file payload manifest (path, sha256, mode) — what the
+          # downstream vendor gate pins. Modes come from the git index, asserted in `test`.
+          {
+            echo "# mythical-ctxmonitor payload manifest — tag v${VERSION}"
+            for f in bin/context_quality.py bin/statusline-command.sh bin/context-signal.sh \
+                     bin/testdata/golden-session.jsonl bin/testdata/golden-session.expected.json; do
+              mode=$(git ls-files -s -- "$f" | awk '{print $1}')
+              sha=$(sha256sum "$f" | awk '{print $1}')
+              printf '%s %s %s\n' "$f" "$sha" "$mode"
+            done
+          } > payload-manifest.txt
+          # Artifact 2: the versioned tarball + its own sha256 — what the install
+          # bootstrap verifies (a per-file manifest cannot authenticate an archive).
+          # HEAD == the tag commit on a tag-push checkout; the tag REF itself may not
+          # exist locally in a shallow checkout, so archive HEAD, not the ref name.
+          git archive --format=tar.gz --prefix="${NAME}/" -o "${NAME}.tar.gz" HEAD
+          sha256sum "${NAME}.tar.gz" > "${NAME}.tar.gz.sha256"
+          # The tarball must carry the executable bit — the only mode git tracks
+          # (git archive renders executables as 0775 in tar headers; extraction
+          # applies the user's umask). Loud on failure.
+          listing="$(tar -tvzf "${NAME}.tar.gz" | grep -E '(bin/(context_quality\.py|statusline-command\.sh|context-signal\.sh)|/install\.sh)$')"
+          echo "$listing"
+          [ "$(printf '%s\n' "$listing" | grep -c '^-rwx')" = 4 ] || {
+            echo "::error::tarball script entries are not all owner-executable"; exit 1; }
+          cat payload-manifest.txt "${NAME}.tar.gz.sha256"
+
+      - name: Publish release with both artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          NAME="mythical-ctxmonitor-${VERSION}"
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes "Payload manifest (per-file sha256+mode) and sha-pinned tarball attached." \
+            payload-manifest.txt "${NAME}.tar.gz" "${NAME}.tar.gz.sha256"
