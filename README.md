@@ -36,7 +36,10 @@ Runs standalone, or as the vendored context engine inside the brokkr agent conta
 
 ## Install
 
-Needs `python3` and `jq` on your `PATH`.
+Needs `python3` and `jq` on your `PATH`. The scorer is stdlib-only — it imports nothing outside
+the standard library, and there is nothing to install alongside it. **Python 3.12** is the
+version CI runs the suite on, so it is the floor the behaviour is actually graded at; that is
+the one to pick if you are choosing.
 
 ```sh
 curl -fsSL https://get.mythicalos.ai/ctxmonitor | bash

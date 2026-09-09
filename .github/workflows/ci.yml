@@ -19,6 +19,35 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # THE PYTHON IS NAMED, NOT INHERITED. Every step below that matters runs a
+      # `python3` — the fixture-hygiene check, and the suite that grades the
+      # scorer's arithmetic against its golden fixture. Taking whatever the
+      # runner image happens to ship makes the interpreter a moving part nobody
+      # declared: the image bumps its default, the suite runs somewhere else,
+      # and a version-sensitive result changes with no commit behind it.
+      #
+      # TWO PINS HERE, AND THEY HAVE SEPARATE LIFECYCLES.
+      #
+      # The ACTION, checked 2026-09-09 against the upstream repository's
+      # releases: v7.0.0 (published 2026-07-20) is the newest release, and the
+      # commit it points at is 5fda3b95a4ea91299a34e894583c3862153e4b97 — the
+      # SHA below, not a tag, because a tag can be moved. The action publishes
+      # no support policy: fixes land on the newest major, so a SHA left alone
+      # is also an unpatched state, and dependabot is what moves it (see
+      # .github/dependabot.yml).
+      #
+      # The INTERPRETER, checked 2026-09-09 against endoflife.date: 3.12
+      # receives security fixes until 2028-10-31 (its bugfix window closed
+      # 2025-04-02). The scorer is stdlib-only and imports nothing outside it,
+      # so this pin is about naming the interpreter the tests are graded on,
+      # not about a dependency.
+      #
+      # Re-check the lifecycle before changing this pin; never write a version from memory.
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
       - name: Shell syntax + lint
         run: |
           set -euo pipefail

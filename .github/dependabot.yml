@@ -1,0 +1,19 @@
+version: 2
+updates:
+  # Actions are pinned to full commit SHAs (supply-chain hardening), which means
+  # they no longer pick up upstream security fixes on their own. Dependabot is
+  # what keeps the pins current — it rewrites the SHA and the trailing version
+  # comment together. Removing this file silently freezes every action.
+  #
+  # This is the only ecosystem here on purpose: the payload is stdlib-only
+  # Python and POSIX shell, with no manifest and no lockfile for any package
+  # manager to update. The workflow pins are the whole dependency surface.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions:
+        patterns: ["*"]
